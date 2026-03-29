@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -13,16 +14,18 @@ namespace RocksmithCableHack;
 public sealed class AppSettings
 {
     // Constants
-    private const string ScheduledTaskName = "RocksmithCableHack_StartWithWindows";
     private static readonly string SettingsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RocksmithCableHack");
     private static readonly string SettingsPath = Path.Combine(SettingsDir, "settings.json");
+    private const string RegistryRunKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+    private const string RegistryAppName = "RocksmithCableHack";
 
     // Variables
     private bool HaveSettingsChanged = false;
-    private bool HasStartWithWindowsChanged = false;
     private readonly JsonSerializerOptions JsonOptions = new()
     {
-        WriteIndented = true
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,       
+        WriteIndented = true,
     };
 
     // Properties
@@ -103,7 +106,6 @@ public sealed class AppSettings
 
             field = value;
             this.HaveSettingsChanged = true;
-            this.HasStartWithWindowsChanged = true;
         }
     } = false;
 
@@ -169,14 +171,14 @@ public sealed class AppSettings
     {
         try
         {
+            this.ApplyStartWithWindows();
             if(!this.HaveSettingsChanged)
                 return;
 
             if(!Directory.Exists(SettingsDir))
                 Directory.CreateDirectory(SettingsDir);
 
-            await File.WriteAllTextAsync(SettingsPath, JsonSerializer.Serialize(this, this.JsonOptions)).ConfigureAwait(false);
-            await this.ApplyStartWithWindows().ConfigureAwait(false);
+            await File.WriteAllTextAsync(SettingsPath, JsonSerializer.Serialize(this, this.JsonOptions)).ConfigureAwait(false);            
             this.HaveSettingsChanged = false;
             if(raiseSavedEvent)
                 this.SettingsSaved?.Invoke(this, EventArgs.Empty);
@@ -191,7 +193,12 @@ public sealed class AppSettings
         try
         {
             if(!File.Exists(SettingsPath))
-                return new AppSettings();
+            {
+                return new AppSettings()
+                {
+                    HaveSettingsChanged = true,
+                };
+            }
 
             var json = await File.ReadAllTextAsync(SettingsPath);
             return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
@@ -202,61 +209,20 @@ public sealed class AppSettings
         }
     }
 
-    private async Task<bool> ApplyStartWithWindows()
-    {
-        if(!this.HasStartWithWindowsChanged)
-            return true;
-
-        // always remove existing task first (idempotent)
-        if(!await RunSchtasksElevated($"/Delete /TN \"{ScheduledTaskName}\" /F"))
-        {
-            this.StartWithWindows = !this.StartWithWindows;
-            this.HasStartWithWindowsChanged = false;
-            return false;
-        }
-
-        if(!this.StartWithWindows)
-        {
-            this.HasStartWithWindowsChanged = false;
-            return true;
-        }
-
-        string exePath = Application.ExecutablePath;
-        if(!await RunSchtasksElevated(
-            $"/Create /TN \"{ScheduledTaskName}\" " +
-            $"/TR \"\\\"{exePath}\\\"\" " +
-            $"/SC ONLOGON " +
-            $"/RL HIGHEST " +
-            $"/F"))
-        {
-            this.StartWithWindows = false;
-            this.HasStartWithWindowsChanged = false;
-            return false;
-        }
-
-        this.HasStartWithWindowsChanged = false;
-        return true;
-    }
-
-    private static async Task<bool> RunSchtasksElevated(string arguments)
+    private bool ApplyStartWithWindows()
     {
         try
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = "schtasks.exe",
-                Arguments = arguments,
-                UseShellExecute = true,
-                Verb = "runas",
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-
-            using var process = Process.Start(startInfo);
-            if(process is null)
+            using var key = Registry.CurrentUser.OpenSubKey(RegistryRunKey, true);
+            if(key is null)
                 return false;
 
-            await process.WaitForExitAsync();
-            return process.ExitCode == 0;
+            if(this.StartWithWindows)
+                key.SetValue(RegistryAppName, $"\"{Application.ExecutablePath}\"");
+            else
+                key.DeleteValue(RegistryAppName, false);
+
+            return true;
         }
         catch
         {

@@ -63,6 +63,7 @@ public class TrayApplicationContext : ApplicationContext
     public async Task InitializeAsync()
     {
         this.Settings = await AppSettings.BuildAsync();
+        await this.Settings.SaveAsync();
         this.Settings.SettingsSaved += (s, e) => this.RunOnUi(async ()=> await this.SyncTrayFromSettings());
 
         this.mniHack = new ToolStripMenuItem("Hack Now", null, this.mniHack_Click) { Enabled = false };
