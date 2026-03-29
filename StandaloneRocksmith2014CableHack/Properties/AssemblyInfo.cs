@@ -6,11 +6,11 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("StandaloneRocksmith2014CableHack")]
+[assembly: AssemblyTitle("Rocksmith Cable Hack")]
 [assembly: AssemblyDescription("This makes Rocksmith use your custom USB guitar cable instead of a RealTone cable.")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Novagetan Productions")]
-[assembly: AssemblyProduct("StandaloneRocksmith2014CableHack")]
+[assembly: AssemblyProduct("RocksmithCableHack")]
 [assembly: AssemblyCopyright("Novagetan Productions Copyright ©  2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
